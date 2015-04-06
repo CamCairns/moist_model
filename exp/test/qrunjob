@@ -1,0 +1,24 @@
+#!/bin/bash
+
+#PBS -l nodes=1:ppn=12
+#PBS -o stdout.out
+#PBS -e stderr.err
+
+#PBS -l walltime=24:00:00
+# Send email when the job begins, aborts or ends
+#PBS -m bae
+# Address to send mail to
+#PBS -M cwc210@exeter.ac.uk
+
+# Load modules
+#source /home/z3309205/scripts/loadmodule
+#ulimit -s unlimited
+#
+#rm -rf ./nohup.out 
+
+for ((i=0; i < 1; i++))
+do 
+
+/home/cwc210/FMS_models/moist_model/exp/test/moist_qscript $i
+
+done

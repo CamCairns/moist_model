@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Load modules
+source /home/z3309205/scripts/loadmodule
+ulimit -s unlimited
+
+rm -rf ./nohup.out 
+
+for ((i=100; i < 161; i++))
+do 
+
+./runscript $i
+
+done

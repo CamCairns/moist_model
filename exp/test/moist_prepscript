@@ -1,0 +1,42 @@
+#!/bin/csh -fe
+
+#$ -l h_cpu=08:00:00
+#$ -N FMS_idealize_spectral_grey_B
+#$ -pe ic.alloc 32
+#$ -o /home/df/sukyoung/exp_control
+#$ -r n
+
+set echo
+#--------------------------------------------------------------------------------------------------------
+# define variables
+set platform  = ia64
+set exp_name  = test
+set model_dir = /home/cwc210/FMS_models/moist_model
+set template  = $model_dir/bin/mkmf.template.$platform       # path to template for your platform
+set mkmf      = $model_dir/bin/mkmf                      # path to executable mkmf
+set mppnccombine = $model_dir/bin/mppnccombine.$platform # path to executable mppnccombine
+set compile_dir      = $model_dir/compilation
+set workdir          = /data/cwc210/working/moist_model/$exp_name
+set arc              = /data/cwc210/archive/moist_model/$exp_name
+#--------------------------------------------------------------------------------------------------------
+
+#setenv MALLOC_CHECK_ 0
+
+# setup directory structure
+if ( ! -d $compile_dir ) then
+mkdir -p $compile_dir
+endif
+
+rm -rf $workdir
+mkdir -p $workdir $workdir/INPUT $workdir/RESTART
+
+if ( ! -d $arc ) then
+mkdir -p $arc
+endif
+
+#--------------------------------------------------------------------------------------------------------
+# compile the model code and create executable
+cd $compile_dir
+make
+#--------------------------------------------------------------------------------------------------------
+

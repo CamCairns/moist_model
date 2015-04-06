@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Load modules
+source /home/z3309205/scripts/loadmodule
+
+
+
+for ((i=1; i < 6; i++))
+do 
+
+./run_spectral_benchmark_grey_control $i
+
+done

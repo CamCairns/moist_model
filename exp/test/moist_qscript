@@ -1,0 +1,137 @@
+#!/bin/csh -f
+
+#$ -l h_cpu=08:00:00
+#$ -N FMS_idealize_spectral_grey_B
+#$ -pe ic.alloc 32
+#$ -o /home/df/sukyoung/exp_control
+#$ -r n
+
+set echo timestampcomp
+
+#--------------------------------------------------------------------------------------------------------
+# define variables
+set platform  = ia64                                   # A unique identifier for your platform
+set npes      = 8                                      # number of processors
+set in        = $1
+set modeldir = /home/cwc210/FMS_models/moist_model # base path to model directory
+#set template  = $cwd/../../../bin/mkmf.template.$platform   # path to template for your platform
+#set mkmf      = $cwd/../../../bin/mkmf                      # path to executable mkmf
+set sourcedir = $modeldir/src                           # path to directory containing model source code # CHANGE PATH NAMES FOR MARTIN CODE
+set mppnccombine = $modeldir/bin/mppnccombine.$platform # path to executable mppnccombine
+#--------------------------------------------------------------------------------------------------------
+set exp_name = test
+set execdir   = $modeldir/exp/spectral/$exp_name/exec.$platform       # where code is compiled and executable is created
+set compile_dir  = $modeldir/compilation  
+set workdir   = /data/cwc210/working/moist_model/$exp_name
+set arc       = /data/cwc210/archive/moist_model/$exp_name
+#set plevel_interp = /home/cwc210/post_processing/plevel_interpolation/scripts
+ 
+#set pathnames = $modeldir/exp/spectral/$exp_name/path_names           # path to file containing list of source paths
+set namelist  = $modeldir/exp/$exp_name/namelists            # path to namelist file
+set diag_table = $modeldir/exp/$exp_name/diag_table           # path to diagnositics table
+set field_table = $modeldir/exp/$exp_name/field_table         # path to field table (specifies tracers)
+set core_namelist = $modeldir/exp/$exp_name/core.nml
+set phys_namelist = $modeldir/exp/$exp_name/phys.nml
+set executable    = $compile_dir/FMS.exe
+#set path_names 	   = $source_dir/path_names
+#--------------------------------------------------------------------------------------------------------
+
+
+#  alias time_stamp       /home/bw/bin/time_stamp.csh
+#  alias runexe           /home/bw/bin/runexe.csh
+#  setenv FMSPP_PATH      /home/bw/bin/fms
+#  alias combine_ncfiles  $FMSPP_PATH/combine_script.csh
+
+# alias get_fms_data "/home/fms/bin/get_fms_data -r lima -m ia64"
+
+# get_fms_data topog pctwater
+
+# source /opt/modules/default/init/tcsh
+#  module switch ifort.8.0.044 ifort.8.1.023
+# module switch mpt-1.0-0 mpt-1.11-1
+#
+#alias mppnccombine     "/data/cwc210/moist_model/bin/mppmccombine.ia64"
+
+set out = $in
+@ out ++
+
+# ************************************************************
+#  echo blah >> $workdir/blah
+#  rm -rf $workdir/* >& /dev/null
+# ************************************************************
+
+rm -rf $workdir # I don't just wan't to do a bulk removal of the workdir because tau.nc and temp.nc are stored in $workdir/INPUT for Jucker stratosphere 
+mkdir -p $workdir $workdir/INPUT $workdir/RESTART
+      
+if ($in > 0) then
+    cd INPUT
+    cp $arc/restarts/res_$in.cpio res
+    cpio -iv < res
+endif
+
+cd $workdir
+
+# set run length and time step, get input data and executable
+cat > input.nml <<EOF
+ &coupler_nml
+     months = 0,
+     days   = 1,
+     hours  = 0,
+     dt_atmos = 900,
+     current_date = 2000,1,1,0,0,0,
+     calendar = 'thirty_day' /
+EOF
+  
+cat $core_namelist >> input.nml
+cat $phys_namelist >> input.nml
+cp  $diag_table diag_table
+cp  $field_table field_table
+cp  $executable $executable:t
+
+#--------------------------------------------------------------------------------------------------------
+# run the model with mpirun
+mpirun -np $npes $executable:t 
+#--------------------------------------------------------------------------------------------------------
+
+# combine netcdf files
+if ($npes > 1) then
+  foreach ncfile (`/bin/ls *.nc.0000`)
+    mppnccombine $ncfile:r
+    if ($status == 0) rm -f $ncfile:r.????
+    end
+endif
+
+if ( ! -d $arc/run$out ) mkdir $arc/run$out
+endif
+cp ./*.nc ./*table *.nml $arc/run$out/
+
+#  /bin/ls *.nc | cpio -ovK > nc_$out.cpio
+#  cp nc_$out.cpio $arc/nc_$out.cpio
+
+# cd RESTART
+# if ($npes > 1) then
+#   foreach ncfile (`/bin/ls *.nc.0000`)
+#     /home/z3410755/misc_files/mppmccombine.ia64 $ncfile:r
+#     if ($status == 0) rm -f $ncfile:r.????
+#     end
+# endif
+
+#--------------------------------------------------------------------------------------------------------
+# post-processing
+#cd $workdir
+#ncwa -a lon $arc/run$out/plevel.nc $arc/run$out/daily_av.nc
+#rm atmos_daily_pinterp.nc
+#ncwa -a time $arc/run$out/daily_av.nc $arc/run$out/monthly_av.nc
+#rm daily_av.nc
+#ncwa -a lon_every $arc/run$out/atmos_dailya.nc $arc/run$out/dailya_av.nc
+#--------------------------------------------------------------------------------------------------------
+
+if ( ! -d $arc/restarts ) then
+mkdir $arc/restarts
+endif
+
+cd RESTART
+/bin/ls *.res *.res.nc | cpio -ov > res_$out.cpio
+cp res_$out.cpio $arc/restarts/
+
+unset echo timestamp

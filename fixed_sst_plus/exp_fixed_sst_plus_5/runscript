@@ -1,0 +1,153 @@
+#!/bin/csh -fe
+
+
+#$ -l h_cpu=08:00:00
+#$ -N FMS_idealize_spectral_grey_B
+#$ -pe ic.alloc 32
+#$ -o /home/df/sukyoung/exp_control
+#$ -r n
+
+
+set echo timestamp
+set machine          = `hostname`
+
+  set use_mpi          = true
+  set do_compile       = true
+  set initial_run      = true
+
+  set in               = $1
+
+  set npes             = 8
+  
+  set exp_name         = fixed_sst_plus_5
+
+  set workdir          = /scratch/z3309205/$exp_name
+  set arc              = /srv/ccrc/data08/z3309205/moist/$exp_name
+  set source_dir       = /home/z3309205/moist_model/fixed_sst_plus
+  set exp_dir          = $source_dir/exp_$exp_name
+  set core_namelist    = $exp_dir/core.nml
+  set phys_namelist    = $exp_dir/phys.nml
+  set diag_table       = $exp_dir/diag_table
+  set field_table       = $exp_dir/field_table
+
+
+
+  set compile_dir      = $source_dir/compilation
+  set executable       = $compile_dir/FMS.exe
+  set path_names = path_names
+  
+ 
+
+#  alias time_stamp       /home/bw/bin/time_stamp.csh
+#  alias runexe           /home/bw/bin/runexe.csh
+#  setenv FMSPP_PATH      /home/bw/bin/fms
+#  alias combine_ncfiles  $FMSPP_PATH/combine_script.csh
+
+# alias get_fms_data "/home/fms/bin/get_fms_data -r lima -m ia64"
+
+# get_fms_data topog pctwater
+
+# source /opt/modules/default/init/tcsh
+#  module switch ifort.8.0.044 ifort.8.1.023
+# module switch mpt-1.0-0 mpt-1.11-1
+setenv MALLOC_CHECK_ 0
+
+
+if($do_compile == true) then
+
+  cd $source_dir
+   /home/z3309205/atm_dycores/atm_dycores/bin/mkmf -a $source_dir -p FMS.exe -t  /home/z3309205/atm_dycores/atm_dycores/bin/mkmf.template.ia64 \
+   -c "-Duse_libMPI -Duse_netCDF" $path_names $source_dir/shared/mpp/include $source_dir/shared/constants /usr/local/include $source_dir/include
+  
+  cp Makefile $compile_dir
+  cd $compile_dir    
+  make
+
+endif
+alias mppnccombine     "/home/z3309205/atm_dycores/atm_dycores/bin/mppnccombine.ia64"
+
+set out = $in
+@ out ++
+
+if ( ! -d $workdir ) mkdir $workdir
+endif
+if ( ! -d $arc ) mkdir $arc
+endif
+if ( ! -d $arc/restarts ) mkdir $arc/restarts
+endif
+
+# ************************************************************
+  echo blah >> $workdir/blah
+  rm -rf $workdir/* >& /dev/null
+# ************************************************************
+
+
+  cd $workdir
+  mkdir INPUT RESTART
+  
+    
+cat > input.nml <<EOF
+ &coupler_nml
+     months = 0,
+     days   = 200,
+     hours  = 0,
+     dt_atmos = 900,
+     current_date = 1982,1,1,0,0,0,
+     calendar = 'thirty_day' /
+
+EOF
+
+
+
+if ($in > 0) then
+    cd INPUT
+    cp  /srv/ccrc/data08/z3309205/moist/fixed_sst/restarts/res_$in.cpio res
+    cpio -iv < res
+endif
+
+
+  cd $workdir
+  
+  cat $core_namelist >> input.nml
+  cat $phys_namelist >> input.nml
+
+  cp  $diag_table diag_table
+  cp  $field_table field_table
+  cp  $executable $executable:t
+
+  mpirun -np $npes $executable:t 
+
+  if ($npes > 1) then
+     foreach ncfile (`/bin/ls *.nc.0000`)
+        mppnccombine $ncfile:r
+        if ($status == 0) rm -f $ncfile:r.????
+     end
+  endif
+
+if ( ! -d $arc/run$in ) mkdir $arc/run$in
+endif
+
+cp ./*.nc $arc/run$in/
+
+#  /bin/ls *.nc | cpio -ovK > nc_$out.cpio
+#  cp nc_$out.cpio $arc/nc_$out.cpio
+
+
+
+  cd RESTART
+  if ($npes > 1) then
+     foreach ncfile (`/bin/ls *.nc.0000`)
+        /home/z3309205/atm_dycores/atm_dycores/bin/mppnccombine.ia64 $ncfile:r
+        if ($status == 0) rm -f $ncfile:r.????
+     end
+  endif
+  /bin/ls *.res *.res.nc | cpio -ov > res_$out.cpio
+  cp res_$out.cpio $arc/restarts/
+
+
+
+#  *******************************
+# mkdir /srv/ccrc/data08/z3309205/moist/$exp_name
+# mv /scratch/z3309205/moist/* /srv/ccrc/data08/z3309205/moist/$exp_name/
+
+  unset echo timestamp
